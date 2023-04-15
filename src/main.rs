@@ -6,8 +6,11 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 // use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_rapier3d::prelude::*;
+use control::StoredVelocity;
 use lazy_static::lazy_static;
+use derive_more::{Deref, DerefMut};
 
+mod control;
 mod objects;
 // mod cam;
 
@@ -23,12 +26,22 @@ fn main() {
         }))
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(PanOrbitCameraPlugin)
-        .add_plugin(RapierDebugRenderPlugin { always_on_top: true, ..default() })
+        .add_plugin(RapierDebugRenderPlugin {
+            always_on_top: true,
+            ..default()
+        })
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_event::<objects::RespawnEvent>()
         .add_startup_system(setup)
-        .add_system(objects::spawn_objects)
         .add_system(disable_camera)
+        .init_resource::<control::ControlActive>()
+        .init_resource::<StoredVelocity>()
+        .add_systems((
+            objects::spawn_objects,
+            control::control_ball.in_base_set(CoreSet::PostUpdate),
+            control::ui,
+            control::tracer,
+        ))
         .run();
 }
 

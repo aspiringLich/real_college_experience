@@ -12,7 +12,8 @@ bevy_egui = "0.20.2"
 bevy_mod_picking = "0.12.0"
 bevy_panorbit_camera = "0.2.0"
 bevy_rapier3d = {version = "0.21.0", features = ["debug-render-3d"]}
- bevy_vox_mesh  = "0.6.0"
+#  bevy_vox_mesh  = "0.6.0"
+derive_more = "0.99.17"
 lazy_static = "1.4.0"
 
 # Enable a small amount of optimization in debug mode

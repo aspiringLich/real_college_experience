@@ -15,6 +15,38 @@ pub struct RespawnEvent;
 const CUP_OFFSET: f32 = 0.6;
 const CUP_OFFSET_Y: f32 = 0.5;
 
+pub fn spawn_ball<T: Bundle>(
+    translation: Vec3,
+    bundle: T,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
+    // ball
+    commands
+        .spawn(PbrBundle {
+            mesh: meshes.add(
+                shape::Icosphere {
+                    radius: BALL_RADIUS,
+                    subdivisions: 1,
+                }
+                .try_into()
+                .unwrap(),
+            ),
+            transform: Transform::from_scale(Vec3::splat(0.02))
+                .with_translation(translation),
+            material: materials.add(Color::rgb_u8(230, 138, 0).into()),
+            ..default()
+        })
+        .insert((
+            Ball,
+            Object,
+            Collider::ball(BALL_RADIUS),
+            Restitution::new(RESTITUTION),
+            bundle
+        ));
+}
+
 pub fn spawn_objects(
     mut respawn: EventReader<RespawnEvent>,
     mut commands: Commands,
@@ -30,31 +62,6 @@ pub fn spawn_objects(
     for entity in q_objects.iter_mut() {
         commands.entity(entity).despawn();
     }
-
-    // ball
-    commands
-        .spawn(PbrBundle {
-            mesh: meshes.add(
-                shape::Icosphere {
-                    radius: BALL_RADIUS,
-                    subdivisions: 1,
-                }
-                .try_into()
-                .unwrap(),
-            ),
-            transform: Transform::from_scale(Vec3::splat(0.02))
-                .with_translation(Vec3::new(0.0, 2.0, 0.0)),
-            material: materials.add(Color::rgb_u8(230, 138, 0).into()),
-            ..default()
-        })
-        .insert((
-            Ball,
-            Object,
-            Collider::ball(BALL_RADIUS),
-            RigidBody::Dynamic,
-            Restitution::new(RESTITUTION),
-            Velocity::linear(Vec3::Z * 3.0)
-        ));
 
     let height: f32 = f32::sqrt(3.0) / 2.0 * CUP_OFFSET;
     let positions = vec![
@@ -106,7 +113,7 @@ lazy_static! {
         }
         // the buttom of the cup
         compound.push((
-            Vec3::new(0.0,  0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
             Quat::IDENTITY,
             Collider::cylinder(CUP_THICKNESS, CUP_RADIUS)
         ));
@@ -117,12 +124,23 @@ lazy_static! {
 
 fn spawn_cup(location: Vec3, commands: &mut Commands, assets: &Res<AssetServer>) {
     commands
-        .spawn(
-            (SceneBundle {
-                transform: Transform::from_translation(location).with_scale(Vec3::splat(5.0)),
-                scene: assets.load("scene.gltf#Scene0"),
-                ..default()
-            }),
-        )
-        .insert((Object, CUP_COLLIDER.clone(), RigidBody::Dynamic));
+        .spawn(SceneBundle {
+            transform: Transform::from_translation(location).with_scale(Vec3::splat(5.0)),
+            scene: assets.load("scene.gltf#Scene0"),
+            ..default()
+        })
+        .insert((
+            Object,
+            CUP_COLLIDER.clone(),
+            RigidBody::Dynamic,
+            ColliderMassProperties::Density(0.3),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Transform::from_xyz(0.0, 0.2, 0.0),
+                Object,
+                Collider::cylinder(0.01, 0.15),
+                Sensor,
+            ));
+        });
 }
