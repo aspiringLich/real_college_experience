@@ -43,6 +43,7 @@ pub fn spawn_ball<T: Bundle>(
             Object,
             Collider::ball(BALL_RADIUS),
             Restitution::new(RESTITUTION),
+            RigidBody::Dynamic,
             bundle
         ));
 }
@@ -50,8 +51,8 @@ pub fn spawn_ball<T: Bundle>(
 pub fn spawn_objects(
     mut respawn: EventReader<RespawnEvent>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    // mut meshes: ResMut<Assets<Mesh>>,
+    // mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<AssetServer>,
     mut q_objects: Query<Entity, With<Object>>,
 ) {

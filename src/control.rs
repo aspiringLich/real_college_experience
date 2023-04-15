@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, time::Duration};
 
 use crate::{
     objects::{spawn_ball, Ball, RespawnEvent},
@@ -9,25 +9,35 @@ use crate::{
 pub struct ControlActive(bool);
 
 pub fn control_ball(
-    q_ball: Query<Entity, With<Ball>>,
+    // q_ball: Query<Entity, With<Ball>>,
     mut respawn: EventReader<RespawnEvent>,
-    mut q_transform: Query<&mut Transform>,
+    // mut q_transform: Query<&mut Transform>,
     mut active: ResMut<ControlActive>,
 ) {
     if respawn.iter().count() == 0 {
         return;
     }
 
-    let ball = q_ball.single();
-    q_transform.get_mut(ball).unwrap().translation = Vec3::new(0.0, 1.0, TABLE.z / 2.0);
+    // let ball = q_ball.single();
+    // q_transform.get_mut(ball).unwrap().translation = Vec3::new(0.0, 1.0, TABLE.z / 2.0);
     **active = true;
 }
 
-#[derive(Default, Resource)]
+#[derive(Resource)]
 pub struct StoredVelocity {
     x_rot: f32,
     y_rot: f32,
     power: f32,
+}
+
+impl Default for StoredVelocity {
+    fn default() -> Self {
+        Self {
+            x_rot: PI * 0.2,
+            y_rot: 0.0,
+            power: 5.0,
+        }
+    }
 }
 
 impl StoredVelocity {
@@ -35,15 +45,17 @@ impl StoredVelocity {
         ExternalImpulse {
             impulse: Quat::from_euler(EulerRot::XYZ, self.x_rot, self.y_rot, 0.0)
                 .mul_vec3(-Vec3::Z)
-                * self.power,
+                * self.power
+                * 0.005,
             ..default()
         }
     }
 }
 
+const BALL_POS: Vec3 = Vec3::new(0.0, 1.0, TABLE.z / 2.0);
+
 pub fn ui(
     mut commands: Commands,
-    q_ball: Query<Entity, With<Ball>>,
     mut active: ResMut<ControlActive>,
     mut ctx: EguiContexts,
     mut stored: ResMut<StoredVelocity>,
@@ -62,7 +74,7 @@ pub fn ui(
             const ANGLE: f32 = PI / 8.0;
             ui.label("X rotation");
             ui.drag_angle(&mut stored.x_rot);
-            stored.x_rot = stored.x_rot.clamp(-ANGLE, ANGLE);
+            stored.x_rot = stored.x_rot.clamp(0.0, PI / 2.0);
             ui.end_row();
             ui.label("Y rotation");
             ui.drag_angle(&mut stored.y_rot);
@@ -72,14 +84,14 @@ pub fn ui(
             ui.add(
                 egui::DragValue::new(&mut stored.power)
                     .speed(0.1)
-                    .clamp_range(5.0..=15.0),
+                    .clamp_range(2.0..=10.0),
             );
             ui.end_row();
         });
         if ui.button("Fire!").clicked() {
             *active = false;
             spawn_ball(
-                Vec3::new(0.0, 1.0, TABLE.z / 2.0),
+                BALL_POS,
                 stored.impulse(),
                 &mut commands,
                 &mut meshes,
@@ -89,6 +101,7 @@ pub fn ui(
     });
 }
 
+#[derive(Deref, DerefMut)]
 pub struct TracerEntities {
     entities: Vec<Entity>,
 }
@@ -134,4 +147,53 @@ impl FromWorld for TracerEntities {
     }
 }
 
-pub fn tracer(entities: Local<TracerEntities>) {}
+pub fn tracer(
+    entities: Local<TracerEntities>,
+    stored: Res<StoredVelocity>,
+    rapier_config: Res<RapierConfiguration>,
+    mut q_transform: Query<&mut Transform>,
+) {
+    let factor = match rapier_config.timestep_mode {
+        TimestepMode::Fixed { dt, .. } => dt,
+        TimestepMode::Variable { max_dt, .. } => max_dt,
+        TimestepMode::Interpolated { dt, .. } => dt,
+    };
+
+    let per_step = 2;
+    let force = stored.impulse().impulse;
+
+    let mut pos = BALL_POS;
+    let mut vel = force / factor * 4.0;
+    for tracer in entities.iter() {
+        for _ in 0..per_step {
+            vel += rapier_config.gravity * factor;
+            pos += vel * factor;
+        }
+
+        q_transform.get_mut(*tracer).unwrap().translation = pos;
+    }
+}
+
+pub fn after_fire(
+    time: Res<Time>,
+    active: Res<ControlActive>,
+    mut timer: Local<Option<Timer>>,
+    mut last_active: Local<bool>,
+) {
+    if **active != *last_active {
+        *last_active = **active;
+        if **active {
+            return;
+        }
+
+        *timer = Some(Timer::from_seconds(3.0, TimerMode::Once));
+    }
+
+    let Some(t) = &mut *timer else { return };
+
+    t.tick(Duration::from_secs_f32(time.delta_seconds()));
+    if t.finished() {
+        *timer = None;
+        dbg!("yee");
+    }
+}

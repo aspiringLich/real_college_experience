@@ -41,6 +41,7 @@ fn main() {
             control::control_ball.in_base_set(CoreSet::PostUpdate),
             control::ui,
             control::tracer,
+            control::after_fire,
         ))
         .run();
 }
@@ -67,7 +68,7 @@ fn disable_camera(
 }
 
 const RESTITUTION: f32 = 0.8;
-const TABLE: Vec3 = Vec3::new(4.0, 0.1, 8.0);
+const TABLE: Vec3 = Vec3::new(4.0, 0.1, 7.0);
 
 fn setup(
     mut commands: Commands,
