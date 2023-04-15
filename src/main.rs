@@ -6,6 +6,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 // use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use bevy_rapier3d::prelude::*;
+use lazy_static::lazy_static;
 
 mod objects;
 // mod cam;
@@ -22,7 +23,7 @@ fn main() {
         }))
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(PanOrbitCameraPlugin)
-        .add_plugin(RapierDebugRenderPlugin::default())
+        .add_plugin(RapierDebugRenderPlugin { always_on_top: true, ..default() })
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_event::<objects::RespawnEvent>()
         .add_startup_system(setup)

@@ -3106,6 +3106,7 @@ dependencies = [
  "bevy_panorbit_camera",
  "bevy_rapier3d",
  "bevy_vox_mesh",
+ "lazy_static",
 ]
 
 [[package]]
