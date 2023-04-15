@@ -1,7 +1,7 @@
 use std::{f32::consts::PI, time::Duration};
 
 use crate::{
-    objects::{spawn_ball, Ball, RespawnEvent},
+    objects::{spawn_ball, Ball, BallBundle, Cup, RespawnEvent, BALL_RADIUS},
     *,
 };
 
@@ -33,9 +33,9 @@ pub struct StoredVelocity {
 impl Default for StoredVelocity {
     fn default() -> Self {
         Self {
-            x_rot: PI * 0.2,
+            x_rot: PI * 0.27,
             y_rot: 0.0,
-            power: 5.0,
+            power: 4.7,
         }
     }
 }
@@ -59,8 +59,9 @@ pub fn ui(
     mut active: ResMut<ControlActive>,
     mut ctx: EguiContexts,
     mut stored: ResMut<StoredVelocity>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    // mut meshes: ResMut<Assets<Mesh>>,
+    // mut materials: ResMut<Assets<StandardMaterial>>,
+    ball_bundle: Local<BallBundle>,
 ) {
     let active = &mut **active;
 
@@ -90,13 +91,7 @@ pub fn ui(
         });
         if ui.button("Fire!").clicked() {
             *active = false;
-            spawn_ball(
-                BALL_POS,
-                stored.impulse(),
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-            );
+            spawn_ball(BALL_POS, stored.impulse(), &mut commands, &*ball_bundle);
         }
     });
 }
@@ -135,7 +130,7 @@ impl FromWorld for TracerEntities {
                 ..default()
             }
         };
-        for _ in 0..10 {
+        for _ in 0..20 {
             entities.push(
                 world
                     .spawn(bundle.clone())
@@ -177,8 +172,14 @@ pub fn tracer(
 pub fn after_fire(
     time: Res<Time>,
     active: Res<ControlActive>,
+    rapier_ctx: Res<RapierContext>,
     mut timer: Local<Option<Timer>>,
     mut last_active: Local<bool>,
+    q_transform: Query<&Transform, With<Ball>>,
+    has_sensor: Query<&Sensor>,
+    q_parent: Query<&Parent>,
+    mut respawn: EventWriter<RespawnEvent>,
+    q_cup: Query<&Cup>,
 ) {
     if **active != *last_active {
         *last_active = **active;
@@ -186,7 +187,7 @@ pub fn after_fire(
             return;
         }
 
-        *timer = Some(Timer::from_seconds(3.0, TimerMode::Once));
+        *timer = Some(Timer::from_seconds(4.0, TimerMode::Once));
     }
 
     let Some(t) = &mut *timer else { return };
@@ -194,6 +195,24 @@ pub fn after_fire(
     t.tick(Duration::from_secs_f32(time.delta_seconds()));
     if t.finished() {
         *timer = None;
-        dbg!("yee");
+        let mut found = None;
+        rapier_ctx.intersections_with_shape(
+            q_transform.single().translation,
+            Rot::IDENTITY,
+            &Collider::ball(BALL_RADIUS * 0.02),
+            QueryFilter::new().predicate(&|e| has_sensor.get(e).is_ok()),
+            |e| {
+                dbg!(e);
+                found = Some(e);
+                false
+            },
+        );
+
+        if let Some(e) = found {
+            let parent = q_parent.get(e).unwrap().get();
+            respawn.send(RespawnEvent::HitCup(*q_cup.get(parent).unwrap()));
+        } else {
+            respawn.send(RespawnEvent::Nothing);
+        }
     }
 }

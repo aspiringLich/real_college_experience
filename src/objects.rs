@@ -1,30 +1,40 @@
 use std::f32::consts::PI;
 
+use bevy::utils::HashSet;
+
 use crate::*;
 
-const BALL_RADIUS: f32 = 5.0;
+pub const BALL_RADIUS: f32 = 5.0;
 
 #[derive(Component)]
 pub struct Object;
 
+#[derive(Component, Clone, Copy, Hash, PartialEq, Eq, Default, Debug)]
+pub struct Cup(pub u8);
+
 #[derive(Component)]
 pub struct Ball;
 
-pub struct RespawnEvent;
+pub enum RespawnEvent {
+    Nothing,
+    HitCup(Cup),
+}
 
 const CUP_OFFSET: f32 = 0.6;
 const CUP_OFFSET_Y: f32 = 0.5;
 
-pub fn spawn_ball<T: Bundle>(
-    translation: Vec3,
-    bundle: T,
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-) {
-    // ball
-    commands
-        .spawn(PbrBundle {
+#[derive(Resource)]
+pub struct BallBundle(PbrBundle);
+
+impl FromWorld for BallBundle {
+    fn from_world(world: &mut World) -> Self {
+        let world = world.cell();
+        let mut meshes = world.get_resource_mut::<Assets<Mesh>>().unwrap();
+        let mut materials = world
+            .get_resource_mut::<Assets<StandardMaterial>>()
+            .unwrap();
+
+        Self(PbrBundle {
             mesh: meshes.add(
                 shape::Icosphere {
                     radius: BALL_RADIUS,
@@ -33,19 +43,44 @@ pub fn spawn_ball<T: Bundle>(
                 .try_into()
                 .unwrap(),
             ),
-            transform: Transform::from_scale(Vec3::splat(0.02))
-                .with_translation(translation),
+            transform: Transform::from_scale(Vec3::splat(0.02)),
             material: materials.add(Color::rgb_u8(230, 138, 0).into()),
             ..default()
         })
-        .insert((
-            Ball,
-            Object,
-            Collider::ball(BALL_RADIUS),
-            Restitution::new(RESTITUTION),
-            RigidBody::Dynamic,
-            bundle
-        ));
+    }
+}
+
+const HEIGHT: f32 = 0.866025403784 * CUP_OFFSET;
+const CUP_POSITIONS: &[Vec3] = &[
+    Vec3::ZERO,
+    Vec3::new(-CUP_OFFSET, 0.0, 0.0),
+    Vec3::new(CUP_OFFSET, 0.0, 0.0),
+    Vec3::new(CUP_OFFSET / 2.0, 0.0, HEIGHT),
+    Vec3::new(-CUP_OFFSET / 2.0, 0.0, HEIGHT),
+    Vec3::new(0.0, 0.0, HEIGHT * 2.0),
+];
+
+pub fn spawn_ball<T: Bundle>(
+    translation: Vec3,
+    bundle: T,
+    commands: &mut Commands,
+    ball: &BallBundle,
+) {
+    // ball
+    commands.spawn(ball.0.clone()).insert((
+        Transform::from_translation(translation).with_scale(Vec3::splat(0.02)),
+        Ball,
+        Object,
+        Collider::ball(BALL_RADIUS),
+        Restitution::new(RESTITUTION),
+        RigidBody::Dynamic,
+        bundle,
+    ));
+}
+
+#[derive(Default, Resource)]
+pub struct TakenCups {
+    pub cups: HashSet<Cup>,
 }
 
 pub fn spawn_objects(
@@ -55,32 +90,32 @@ pub fn spawn_objects(
     // mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<AssetServer>,
     mut q_objects: Query<Entity, With<Object>>,
+    mut taken_cups: Local<TakenCups>,
 ) {
-    if respawn.iter().count() == 0 {
-        return;
-    }
-
-    for entity in q_objects.iter_mut() {
-        commands.entity(entity).despawn();
-    }
-
-    let height: f32 = f32::sqrt(3.0) / 2.0 * CUP_OFFSET;
-    let positions = vec![
-        Vec3::ZERO,
-        Vec3::new(-CUP_OFFSET, 0.0, 0.0),
-        Vec3::new(CUP_OFFSET, 0.0, 0.0),
-        Vec3::new(CUP_OFFSET / 2.0, 0.0, height),
-        Vec3::new(-CUP_OFFSET / 2.0, 0.0, height),
-        Vec3::new(0.0, 0.0, height * 2.0),
-    ];
-
-    // cups
-    for dir in [1.0, -1.0] {
-        let center = Vec3::new(0.0, 0.05, (TABLE.z / 2.0 - CUP_OFFSET_Y) * -dir);
-        for position in &positions {
-            let mut p = position.clone();
-            p.z *= dir;
-            spawn_cup(center + p, &mut commands, &assets)
+    for event in respawn.iter() {
+        for entity in q_objects.iter_mut() {
+            commands.entity(entity).despawn_recursive();
+        }
+        
+        match event {
+            RespawnEvent::Nothing => {}
+            RespawnEvent::HitCup(cup) => {
+                taken_cups.cups.insert(*cup);
+            }
+        }
+        
+        // cups
+        dbg!(&taken_cups.cups);
+        for dir in [1.0, -1.0].iter() {
+            let center = Vec3::new(0.0, 0.05, (TABLE.z / 2.0 - CUP_OFFSET_Y) * -dir);
+            for (i, position) in CUP_POSITIONS.iter().enumerate() {
+                if *dir == 1.0 && taken_cups.cups.contains(&Cup(i as u8)) {
+                    continue;
+                }
+                let mut p = position.clone();
+                p.z *= dir;
+                spawn_cup(center + p, &mut commands, &assets, i as u8)
+            }
         }
     }
 }
@@ -123,7 +158,7 @@ lazy_static! {
     };
 }
 
-fn spawn_cup(location: Vec3, commands: &mut Commands, assets: &Res<AssetServer>) {
+fn spawn_cup(location: Vec3, commands: &mut Commands, assets: &Res<AssetServer>, n: u8) {
     commands
         .spawn(SceneBundle {
             transform: Transform::from_translation(location).with_scale(Vec3::splat(5.0)),
@@ -135,6 +170,7 @@ fn spawn_cup(location: Vec3, commands: &mut Commands, assets: &Res<AssetServer>)
             CUP_COLLIDER.clone(),
             RigidBody::Dynamic,
             ColliderMassProperties::Density(0.3),
+            Cup(n),
         ))
         .with_children(|parent| {
             parent.spawn((

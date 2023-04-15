@@ -118,5 +118,5 @@ fn setup(
         ..default()
     });
 
-    respawn.send(objects::RespawnEvent)
+    respawn.send(objects::RespawnEvent::Nothing)
 }
