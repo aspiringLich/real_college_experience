@@ -23,7 +23,7 @@ pub fn control_ball(
     **active = true;
 }
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct StoredVelocity {
     x_rot: f32,
     y_rot: f32,
@@ -41,10 +41,10 @@ impl Default for StoredVelocity {
 }
 
 impl StoredVelocity {
-    fn impulse(&self) -> ExternalImpulse {
+    fn impulse(&self, team: Team) -> ExternalImpulse {
         ExternalImpulse {
-            impulse: Quat::from_euler(EulerRot::XYZ, self.x_rot, self.y_rot, 0.0)
-                .mul_vec3(-Vec3::Z)
+            impulse: Quat::from_euler(EulerRot::XYZ, self.x_rot * team.factor(), self.y_rot, 0.0)
+                .mul_vec3(-Vec3::Z * team.factor())
                 * self.power
                 * 0.005,
             ..default()
@@ -52,16 +52,20 @@ impl StoredVelocity {
     }
 }
 
-const BALL_POS: Vec3 = Vec3::new(0.0, 1.0, TABLE.z / 2.0);
+fn ball_pos(team: Team) -> Vec3 {
+    Vec3::new(0.0, 1.0, TABLE.z / 2.0 * team.factor())
+}
 
 pub fn ui(
     mut commands: Commands,
     mut active: ResMut<ControlActive>,
     mut ctx: EguiContexts,
     mut stored: ResMut<StoredVelocity>,
+    mut local_stored: Local<[StoredVelocity; 2]>,
     // mut meshes: ResMut<Assets<Mesh>>,
     // mut materials: ResMut<Assets<StandardMaterial>>,
     ball_bundle: Local<BallBundle>,
+    team: Res<Team>,
 ) {
     let active = &mut **active;
 
@@ -74,24 +78,33 @@ pub fn ui(
         egui::Grid::new("Grid").show(ui, |ui| {
             const ANGLE: f32 = PI / 8.0;
             ui.label("X rotation");
-            ui.drag_angle(&mut stored.x_rot);
-            stored.x_rot = stored.x_rot.clamp(0.0, PI / 2.0);
+            ui.drag_angle(&mut local_stored[*team as usize].x_rot);
+            local_stored[*team as usize].x_rot =
+                local_stored[*team as usize].x_rot.clamp(0.0, PI / 2.0);
             ui.end_row();
             ui.label("Y rotation");
-            ui.drag_angle(&mut stored.y_rot);
-            stored.y_rot = stored.y_rot.clamp(-ANGLE, ANGLE);
+            ui.drag_angle(&mut local_stored[*team as usize].y_rot);
+            local_stored[*team as usize].y_rot =
+                local_stored[*team as usize].y_rot.clamp(-ANGLE, ANGLE);
             ui.end_row();
             ui.label("Power");
             ui.add(
-                egui::DragValue::new(&mut stored.power)
+                egui::DragValue::new(&mut local_stored[*team as usize].power)
                     .speed(0.1)
                     .clamp_range(2.0..=10.0),
             );
             ui.end_row();
+            
+            *stored = local_stored[*team as usize].clone();
         });
         if ui.button("Fire!").clicked() {
             *active = false;
-            spawn_ball(BALL_POS, stored.impulse(), &mut commands, &*ball_bundle);
+            spawn_ball(
+                ball_pos(*team),
+                stored.impulse(*team),
+                &mut commands,
+                &*ball_bundle,
+            );
         }
     });
 }
@@ -147,7 +160,13 @@ pub fn tracer(
     stored: Res<StoredVelocity>,
     rapier_config: Res<RapierConfiguration>,
     mut q_transform: Query<&mut Transform>,
+    active: Res<ControlActive>,
+    team: Res<Team>,
 ) {
+    if !**active || !stored.is_changed() {
+        return;
+    }
+
     let factor = match rapier_config.timestep_mode {
         TimestepMode::Fixed { dt, .. } => dt,
         TimestepMode::Variable { max_dt, .. } => max_dt,
@@ -155,9 +174,9 @@ pub fn tracer(
     };
 
     let per_step = 2;
-    let force = stored.impulse().impulse;
+    let force = stored.impulse(*team).impulse;
 
-    let mut pos = BALL_POS;
+    let mut pos = ball_pos(*team);
     let mut vel = force / factor * 4.0;
     for tracer in entities.iter() {
         for _ in 0..per_step {
@@ -212,7 +231,7 @@ pub fn after_fire(
             let parent = q_parent.get(e).unwrap().get();
             respawn.send(RespawnEvent::HitCup(*q_cup.get(parent).unwrap()));
         } else {
-            respawn.send(RespawnEvent::Nothing);
+            respawn.send(RespawnEvent::Missed);
         }
     }
 }

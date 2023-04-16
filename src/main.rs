@@ -9,6 +9,7 @@ use bevy_rapier3d::prelude::*;
 use control::StoredVelocity;
 use lazy_static::lazy_static;
 use derive_more::{Deref, DerefMut};
+use objects::Team;
 
 mod control;
 mod objects;
@@ -24,18 +25,20 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(EguiPlugin)
+        // .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(PanOrbitCameraPlugin)
-        .add_plugin(RapierDebugRenderPlugin {
-            always_on_top: true,
-            ..default()
-        })
+        // .add_plugin(RapierDebugRenderPlugin {
+        //     always_on_top: true,
+        //     ..default()
+        // })
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_event::<objects::RespawnEvent>()
         .add_startup_system(setup)
         .add_system(disable_camera)
         .init_resource::<control::ControlActive>()
         .init_resource::<StoredVelocity>()
+        .init_resource::<Team>()
         .add_systems((
             objects::spawn_objects,
             control::control_ball.in_base_set(CoreSet::PostUpdate),

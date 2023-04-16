@@ -18,10 +18,27 @@ pub struct Ball;
 pub enum RespawnEvent {
     Nothing,
     HitCup(Cup),
+    Missed,
 }
 
 const CUP_OFFSET: f32 = 0.6;
 const CUP_OFFSET_Y: f32 = 0.5;
+
+#[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
+pub enum Team {
+    #[default]
+    Left,
+    Right,
+}
+
+impl Team {
+    pub fn factor(self) -> f32 {
+        match self {
+            Self::Left => 1.0,
+            Self::Right => -1.0,
+        }
+    }
+}
 
 #[derive(Resource)]
 pub struct BallBundle(PbrBundle);
@@ -80,7 +97,7 @@ pub fn spawn_ball<T: Bundle>(
 
 #[derive(Default, Resource)]
 pub struct TakenCups {
-    pub cups: HashSet<Cup>,
+    pub cups: [HashSet<Cup>; 2],
 }
 
 pub fn spawn_objects(
@@ -91,25 +108,32 @@ pub fn spawn_objects(
     assets: Res<AssetServer>,
     mut q_objects: Query<Entity, With<Object>>,
     mut taken_cups: Local<TakenCups>,
+    mut team: ResMut<Team>,
 ) {
     for event in respawn.iter() {
         for entity in q_objects.iter_mut() {
             commands.entity(entity).despawn_recursive();
         }
-        
+
         match event {
             RespawnEvent::Nothing => {}
             RespawnEvent::HitCup(cup) => {
-                taken_cups.cups.insert(*cup);
+                taken_cups.cups[*team as usize].insert(*cup);
+            }
+            RespawnEvent::Missed => {
+                match *team {
+                    Team::Left => *team = Team::Right,
+                    Team::Right => *team = Team::Left,
+                }
             }
         }
-        
+
         // cups
         dbg!(&taken_cups.cups);
-        for dir in [1.0, -1.0].iter() {
+        for (team, dir) in [1.0, -1.0].iter().enumerate() {
             let center = Vec3::new(0.0, 0.05, (TABLE.z / 2.0 - CUP_OFFSET_Y) * -dir);
             for (i, position) in CUP_POSITIONS.iter().enumerate() {
-                if *dir == 1.0 && taken_cups.cups.contains(&Cup(i as u8)) {
+                if *dir == 1.0 && taken_cups.cups[team].contains(&Cup(i as u8)) {
                     continue;
                 }
                 let mut p = position.clone();
@@ -169,7 +193,7 @@ fn spawn_cup(location: Vec3, commands: &mut Commands, assets: &Res<AssetServer>,
             Object,
             CUP_COLLIDER.clone(),
             RigidBody::Dynamic,
-            ColliderMassProperties::Density(0.3),
+            ColliderMassProperties::Density(1.0),
             Cup(n),
         ))
         .with_children(|parent| {
