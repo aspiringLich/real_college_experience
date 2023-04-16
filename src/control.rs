@@ -213,7 +213,7 @@ pub fn after_fire(
 
     let Some(t) = &mut *timer else { return };
 
-    t.tick(Duration::from_secs_f32(time.delta_seconds()));
+    t.tick(Duration::from_secs_f32(1.0 / 60.0));
     if t.finished() {
         *timer = None;
         let mut found = None;

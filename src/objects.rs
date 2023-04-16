@@ -133,7 +133,7 @@ pub fn spawn_objects(
         for (team, dir) in [1.0, -1.0].iter().enumerate() {
             let center = Vec3::new(0.0, 0.05, (TABLE.z / 2.0 - CUP_OFFSET_Y) * -dir);
             for (i, position) in CUP_POSITIONS.iter().enumerate() {
-                if *dir == 1.0 && taken_cups.cups[team].contains(&Cup(i as u8)) {
+                if taken_cups.cups[team].contains(&Cup(i as u8)) {
                     continue;
                 }
                 let mut p = position.clone();
