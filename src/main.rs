@@ -13,6 +13,7 @@ use objects::Team;
 
 mod control;
 mod objects;
+mod light;
 // mod cam;
 
 fn main() {
@@ -45,6 +46,7 @@ fn main() {
             control::ui,
             control::tracer,
             control::after_fire,
+            light::strobe_light,
         ))
         .run();
 }
@@ -113,7 +115,7 @@ fn setup(
     // light
     commands.spawn(PointLightBundle {
         point_light: PointLight {
-            intensity: 1500.0,
+            intensity: 2000.0,
             shadows_enabled: true,
             ..default()
         },

@@ -77,6 +77,8 @@ pub fn ui(
     egui::Window::new("Control").show(ctx, |ui| {
         egui::Grid::new("Grid").show(ui, |ui| {
             const ANGLE: f32 = PI / 8.0;
+            ui.label(format!("Team {} is up!", *team as usize + 1));
+            ui.end_row();
             ui.label("X rotation");
             ui.drag_angle(&mut local_stored[*team as usize].x_rot);
             local_stored[*team as usize].x_rot =
